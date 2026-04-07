@@ -126,11 +126,37 @@ curl http://localhost:8001/health
 
 ---
 
+## Run with Docker Compose
+
+```bash
+mkdir -p data/photos data/chroma_db photos
+docker compose up -d
+```
+
+### Services
+
+| Port | Service |
+|------|---------|
+| 8081 | AMA Backend (FastAPI) |
+| 2398 | AMA Frontend (Vite/React) |
+| 42069 | llama.cpp server |
+| 8000 | ChromaDB |
+
+### Health Checks
+
+```bash
+curl http://localhost:8081/health    # Backend
+curl http://localhost:2398           # Frontend
+curl http://localhost:42069/health   # LLM server
+```
+
+---
+
 ## Run Backend (Development)
 
 ```bash
 pip install -r requirements.txt
-uvicorn src.api:app --reload --port 8001
+uvicorn src.api:app --reload --port 8081
 ```
 
 ---
