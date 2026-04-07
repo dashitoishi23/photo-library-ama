@@ -126,6 +126,15 @@ curl http://localhost:8001/health
 
 ---
 
+## Run Backend (Development)
+
+```bash
+pip install -r requirements.txt
+uvicorn src.api:app --reload --port 8001
+```
+
+---
+
 ## Index Your Photos
 
 Run once to caption and index your photos:
