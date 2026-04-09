@@ -7,11 +7,12 @@ services:
       - "8081:8081"
     volumes:
       - ./data:/app/data
-      - ./photos:/app/photos:ro
     environment:
       CHROMA_HOST: chroma
       CHROMA_PORT: 6000
       LLM_BASE_URL: http://llama-server:8080/v1
+      PHOTOS_DIR: /mnt/f/immich-photos
+      HF_CACHE: /mnt/f/hf-cache
     depends_on:
       llama-server:
         condition: service_healthy
