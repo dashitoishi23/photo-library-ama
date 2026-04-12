@@ -10,6 +10,7 @@ pnpm-debug.log*
 lerna-debug.log*
 
 data
+.env
 
 node_modules
 dist
