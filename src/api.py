@@ -1,9 +1,10 @@
-import os
 import logging
+from typing import List, Optional
 from fastapi import FastAPI, HTTPException
-from src.handlers import index_photos
+from pydantic import BaseModel
+from src.handlers import index_photos, get_stats, add_history_item, get_history_item
 from src.handlers.generate_captions import PhotoIndexingError, ModelLoadError, ChromaDBError
-
+from src.config import get_settings
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -11,9 +12,51 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="Photo Library AMA")
 
 
+class AddHistoryItemRequest(BaseModel):
+    user_query: str
+    response: dict
+
+
+class AddHistoryItemResponse(BaseModel):
+    id: str
+
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/get-stats")
+def api_get_stats():
+    try:
+        return get_stats()
+    except Exception as e:
+        logger.exception(f"Failed to get stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/add-history-item", response_model=AddHistoryItemResponse)
+def api_add_history_item(request: AddHistoryItemRequest):
+    try:
+        item_id = add_history_item(request.user_query, request.response)
+        return AddHistoryItemResponse(id=item_id)
+    except Exception as e:
+        logger.exception(f"Failed to add history item: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/get-history-item")
+def api_get_history_item(item_id: str):
+    try:
+        result = get_history_item(item_id)
+        if result is None:
+            raise HTTPException(status_code=404, detail="Item not found")
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Failed to get history item: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/photos")
@@ -33,14 +76,12 @@ def index():
 
 @app.post("/generate-captions")
 def generate_captions():
-    photos_dir = os.getenv("PHOTOS_DIR", "/app/photos")
-    chroma_host = os.getenv("CHROMA_HOST", "chroma")
-    chroma_port = int(os.getenv("CHROMA_PORT", "8000"))
-
-    logger.info(f"{photos_dir}, {chroma_host}")
+    settings = get_settings()
+    logger.info(f"{settings.PHOTOS_DIR}")
+    # logger.info(f"Photos dir: {settings.PHOTOS_DIR}, Chroma host: {settings.CHROMA_HOST}")
     
     try:
-        result = index_photos(photos_dir, chroma_host, chroma_port)
+        result = index_photos(settings.PHOTOS_DIR, settings.CHROMA_HOST, settings.CHROMA_PORT)
         return result
     except ModelLoadError as e:
         logger.error(f"Model load error: {e}")

@@ -14,4 +14,6 @@ requests>=2.31.0
 sseclient-py>=1.8.0
 
 python-dotenv>=1.0.0
+pydantic-settings>=2.0.0
+geopy>=2.4.0
 numpy>=1.24.0

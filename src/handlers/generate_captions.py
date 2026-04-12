@@ -10,6 +10,9 @@ from PIL import Image
 import piexif
 import chromadb
 
+from src.config import get_settings
+from src.handlers.geocoding import reverse_geocode
+
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -70,9 +73,9 @@ def extract_exif(image_path: str) -> dict[str, Any]:
             
             if lat and lon and lat_ref and lon_ref:
                 def convert_to_decimal(coords, ref):
-                    degrees = coords[0]
-                    minutes = coords[1]
-                    seconds = coords[2]
+                    degrees = coords[0][0] / coords[0][1]
+                    minutes = coords[1][0] / coords[1][1]
+                    seconds = coords[2][0] / coords[2][1]
                     decimal = degrees + (minutes / 60.0) + (seconds / 3600.0)
                     if ref in [b'S', b'W']:
                         decimal = -decimal
@@ -121,7 +124,10 @@ def create_embedding_text(metadata: dict[str, Any], caption: str) -> str:
 def get_models():
     global _blip2_processor, _blip2_model, _embedding_model
 
-    hf_cache = os.getenv("HF_CACHE", "~/.cache/huggingface")
+    settings = get_settings()
+    hf_cache = settings.HF_CACHE
+
+    logger.info(f"HF_CACHE ==== {hf_cache}")
     
     if _blip2_processor is None:
         try:
@@ -214,6 +220,11 @@ def index_photos(photos_dir: str, chroma_host: str, chroma_port: int) -> dict:
             "gps_lon": exif_data.get("gps_lon"),
         }
         
+        if exif_data.get("gps_lat") and exif_data.get("gps_lon"):
+            location = reverse_geocode(exif_data["gps_lat"], exif_data["gps_lon"])
+            if location:
+                metadata["location"] = location
+        
         try:
             embedding_text = create_embedding_text(metadata, caption)
             embedding = embedding_model.encode(embedding_text).tolist()
@@ -244,12 +255,10 @@ def index_photos(photos_dir: str, chroma_host: str, chroma_port: int) -> dict:
 
 
 def main():
-    photos_dir = os.getenv("PHOTOS_DIR", "/app/photos")
-    chroma_host = os.getenv("CHROMA_HOST", "localhost")
-    chroma_port = int(os.getenv("CHROMA_PORT", "8000"))
+    settings = get_settings()
     
     try:
-        result = index_photos(photos_dir, chroma_host, chroma_port)
+        result = index_photos(settings.PHOTOS_DIR, settings.CHROMA_HOST, settings.CHROMA_PORT)
         logger.info(f"Done! Indexed {result['indexed']} photos")
     except PhotoIndexingError as e:
         logger.error(f"Photo indexing failed: {e}")

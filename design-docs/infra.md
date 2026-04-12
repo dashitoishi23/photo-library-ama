@@ -314,5 +314,108 @@ If something on the host is already using port 8000, change the host-side mappin
 
 ---
 
+## Geocoding Utilities
+
+### Overview
+
+The system stores GPS coordinates from EXIF data in two fields:
+- `gps_lat` — Latitude (decimal degrees, e.g., `34.0522`)
+- `gps_lon` — Longitude (decimal degrees, e.g., `-118.2437`)
+
+Two utility functions are provided:
+
+| Function | Description | Example |
+|---|---|---|
+| **Reverse Geocoding** | Convert coordinates → human-readable address | `34.0522, -118.2437` → "Los Angeles, CA" |
+| **Geocoding** | Convert address → coordinates | "Santa Monica Pier" → `(34.0086, -118.4970)` |
+
+### Dependencies
+
+```bash
+pip install geopy
+```
+
+### Implementation
+
+```python
+# src/handlers/geocoding.py
+from geopy.geocoders import Nominatim
+from geopy.exc import GeocoderTimedOut, GeocoderUnavailable
+from typing import Optional
+import time
+
+_geocoder = Nominatim(user_agent="photo-library-ama")
+
+
+def reverse_geocode(lat: float, lon: float) -> Optional[str]:
+    """Convert GPS coordinates to a human-readable address."""
+    try:
+        location = _geocoder.reverse((lat, lon), exactly_one=True)
+        if location:
+            return location.address
+    except (GeocoderTimedOut, GeocoderUnavailable):
+        pass
+    return None
+
+
+def geocode(address: str) -> Optional[tuple[float, float]]:
+    """Convert an address to GPS coordinates."""
+    try:
+        location = _geocoder.geocode(address, exactly_one=True)
+        if location:
+            return (location.latitude, location.longitude)
+    except (GeocoderTimedOut, GeocoderUnavailable):
+        pass
+    return None
+
+
+def rate_limited_geocode(address: str, delay: float = 1.0) -> Optional[tuple[float, float]]:
+    """Geocode with rate limiting to respect Nominatim's usage policy."""
+    time.sleep(delay)
+    return geocode(address)
+```
+
+### Usage
+
+```python
+from src.handlers.geocoding import reverse_geocode, geocode
+
+# Reverse geocode GPS coordinates from EXIF
+gps_lat = 34.0522
+gps_lon = -118.2437
+address = reverse_geocode(gps_lat, gps_lon)
+print(address)  # "Los Angeles, California, United States"
+
+# Geocode an address to get coordinates
+coords = geocode("Santa Monica Pier, CA")
+print(coords)   # (34.0086, -118.4970)
+```
+
+### Rate Limits
+
+The Nominatim service (OpenStreetMap) enforces a strict usage policy:
+- Maximum 1 request per second
+- No commercial use without permission
+
+For production use, consider:
+- **Paid alternatives**: Google Geocoding API, Mapbox, OpenCage
+- **Local solution**: Use a self-hosted Nominatim instance or offline database (e.g., GeoPandas with Natural Earth data)
+
+### Storing Location Data
+
+When reverse geocoding is performed, store the result in ChromaDB metadata:
+
+```python
+metadata = {
+    "filename": filename,
+    "gps_lat": gps_lat,
+    "gps_lon": gps_lon,
+    "location": address,  # NEW: human-readable address
+    # ... other fields
+}
+```
+
+---
+
 *Document Status: Ready for Implementation*  
-*Last Updated: April 5, 2026*
+*Last Updated: April 12, 2026*

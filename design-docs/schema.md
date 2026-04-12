@@ -9,52 +9,57 @@ This document defines the schema for storing photo metadata in Chroma vector dat
 ## 2. EXIF Metadata Extraction
 
 ### Libraries Used
-- **Pillow (PIL)**: Built-in EXIF reading via `Image.getexif()`
-- **piexif**: For more detailed EXIF parsing (optional)
+- **piexif**: For detailed EXIF parsing
 
 ### Metadata Extracted
 
 | Field | EXIF Tag | Type | Description |
 |-------|----------|------|-------------|
-| `date_taken` | `DateTimeOriginal` | string | ISO format: `YYYY:MM:DD HH:MM:SS` |
-| `date_modified` | `DateTime` | string | File modification date |
+| `date_taken` | `DateTime` | string | ISO format: `YYYY:MM:DD HH:MM:SS` |
 | `gps_lat` | `GPSInfo[GPSLatitude]` | float | Latitude decimal |
 | `gps_lon` | `GPSInfo[GPSLongitude]` | float | Longitude decimal |
-| `gps_lat_ref` | `GPSInfo[GPSLatitudeRef]` | string | "N" or "S" |
-| `gps_lon_ref` | `GPSInfo[GPSLongitudeRef]` | string | "E" or "W" |
 | `camera_make` | `Make` | string | Camera manufacturer |
 | `camera_model` | `Model` | string | Camera model |
-| `orientation` | `Orientation` | int | Image orientation |
 
 ### Processing Logic
 
 ```python
 def extract_exif(image_path: str) -> dict:
-    """Extract EXIF metadata from image."""
-    metadata = {}
+    """Extract EXIF metadata from image using piexif."""
+    exif_dict = {}
+    exif_dict_raw = piexif.load(image_path)
     
-    with Image.open(image_path) as img:
-        exif = img.getexif()
+    # Date taken
+    date_taken = exif_dict_raw.get("0th", {}).get(piexif.ImageIFD.DateTime, "").decode()
+    exif_dict["date_taken"] = date_taken
+    
+    # Camera info
+    exif_dict["camera_make"] = exif_dict_raw.get("0th", {}).get(piexif.ImageIFD.Make, "").decode()
+    exif_dict["camera_model"] = exif_dict_raw.get("0th", {}).get(piexif.ImageIFD.Model, "").decode()
+    
+    # GPS coordinates
+    gps_ifd = exif_dict_raw.get("GPS", {})
+    if gps_ifd:
+        lat = gps_ifd.get(piexif.GPSIFD.GPSLatitude)
+        lat_ref = gps_ifd.get(piexif.GPSIFD.GPSLatitudeRef)
+        lon = gps_ifd.get(piexif.GPSIFD.GPSLongitude)
+        lon_ref = gps_ifd.get(piexif.GPSIFD.GPSLongitudeRef)
         
-        # Date taken
-        if exif.get(0x9003):  # DateTimeOriginal
-            metadata['date_taken'] = exif[0x9003]
-        
-        # GPS coordinates
-        gps_ifd = exif.get(0x8825)  # GPSInfo
-        if gps_ifd:
-            lat = gps_ifd.get(0x0002)
-            lat_ref = gps_ifd.get(0x0001)
-            lon = gps_ifd.get(0x0004)
-            lon_ref = gps_ifd.get(0x0003)
+        if lat and lon and lat_ref and lon_ref:
+            # GPS coords are stored as rationals (tuples of numerator/denominator)
+            def convert_to_decimal(coords, ref):
+                degrees = coords[0][0] / coords[0][1]
+                minutes = coords[1][0] / coords[1][1]
+                seconds = coords[2][0] / coords[2][1]
+                decimal = degrees + (minutes / 60.0) + (seconds / 3600.0)
+                if ref in [b'S', b'W']:
+                    decimal = -decimal
+                return decimal
             
-            if lat and lon:
-                metadata['gps_lat'] = convert_gps(lat)
-                metadata['gps_lat_ref'] = lat_ref
-                metadata['gps_lon'] = convert_gps(lon)
-                metadata['gps_lon_ref'] = lon_ref
+            exif_dict["gps_lat"] = convert_to_decimal(lat, lat_ref)
+            exif_dict["gps_lon"] = convert_to_decimal(lon, lon_ref)
     
-    return metadata
+    return exif_dict
 ```
 
 ---
@@ -86,7 +91,7 @@ photo_captions
 | Field | Type | Description |
 |-------|------|-------------|
 | `id` | string | Unique ID (filename, e.g., `IMG_0001.jpg`) |
-| `embedding` | float[384] | Sentence-transformer embedding of caption |
+| `embedding` | float[384] | Sentence-transformer embedding of caption + metadata |
 | `document` | string | The generated caption text |
 | `metadata` | dict | Associated metadata |
 
@@ -97,14 +102,12 @@ photo_captions
 | `filename` | string | Image filename | `IMG_0001.jpg` |
 | `filepath` | string | Full path to image | `/photos/vacation/IMG_0001.jpg` |
 | `caption` | string | Generated caption | `A sunset over the ocean...` |
-| `date_taken` | string | When photo was taken | `2024:07:15 18:30:00` |
-| `date_modified` | string | File modification date | `2024:07:15 18:35:00` |
+| `date_taken` | string | When photo was taken (EXIF DateTime) | `2024:07:15 18:30:00` |
 | `gps_lat` | float | Latitude | `34.0522` |
 | `gps_lon` | float | Longitude | `-118.2437` |
-| `location` | string | Reverse-geocoded location | `Los Angeles, CA` |
+| `location` | string | Reverse-geocoded address | `Santa Monica Beach, California, United States` |
 | `camera_make` | string | Camera manufacturer | `Apple` |
 | `camera_model` | string | Camera model | `iPhone 15 Pro` |
-| `orientation` | int | Image orientation | `1` |
 
 ### Example Record
 
@@ -120,13 +123,11 @@ photo_captions
         "filepath": "/home/user/photos/vacation/IMG_0001.jpg",
         "caption": "A golden sunset over the Pacific Ocean with waves crashing on the shore",
         "date_taken": "2024:07:15 18:30:00",
-        "date_modified": "2024:07:15 18:35:00",
         "gps_lat": 34.0522,
         "gps_lon": -118.2437,
-        "location": "Santa Monica, CA",
+        "location": "Santa Monica Beach, Santa Monica, California, United States",
         "camera_make": "Apple",
-        "camera_model": "iPhone 15 Pro",
-        "orientation": 1
+        "camera_model": "iPhone 15 Pro"
     }
 }
 ```
@@ -139,41 +140,75 @@ photo_captions
 
 ```python
 import chromadb
-from chromadb.config import Settings
-from PIL import Image
 from sentence_transformers import SentenceTransformer
+import piexif
 
 class PhotoVectorStore:
-    def __init__(self, persist_dir: str = "./data/chroma_db"):
-        self.client = chromadb.PersistentClient(path=persist_dir)
+    def __init__(self, chroma_host: str, chroma_port: int):
+        self.client = chromadb.HttpClient(host=chroma_host, port=chroma_port)
         self.collection = self.client.get_or_create_collection(
             name="photo_captions",
             metadata={"hnsw:space": "cosine"}
         )
         self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
     
+    def extract_exif(self, image_path: str) -> dict:
+        """Extract EXIF metadata from image using piexif."""
+        exif_dict = {}
+        exif_dict_raw = piexif.load(image_path)
+        
+        exif_dict["date_taken"] = exif_dict_raw.get("0th", {}).get(piexif.ImageIFD.DateTime, "").decode()
+        exif_dict["camera_make"] = exif_dict_raw.get("0th", {}).get(piexif.ImageIFD.Make, "").decode()
+        exif_dict["camera_model"] = exif_dict_raw.get("0th", {}).get(piexif.ImageIFD.Model, "").decode()
+        
+        gps_ifd = exif_dict_raw.get("GPS", {})
+        if gps_ifd:
+            lat = gps_ifd.get(piexif.GPSIFD.GPSLatitude)
+            lat_ref = gps_ifd.get(piexif.GPSIFD.GPSLatitudeRef)
+            lon = gps_ifd.get(piexif.GPSIFD.GPSLongitude)
+            lon_ref = gps_ifd.get(piexif.GPSIFD.GPSLongitudeRef)
+            
+            if lat and lon and lat_ref and lon_ref:
+                def convert_to_decimal(coords, ref):
+                    degrees = coords[0][0] / coords[0][1]
+                    minutes = coords[1][0] / coords[1][1]
+                    seconds = coords[2][0] / coords[2][1]
+                    decimal = degrees + (minutes / 60.0) + (seconds / 3600.0)
+                    if ref in [b'S', b'W']:
+                        decimal = -decimal
+                    return decimal
+                
+                exif_dict["gps_lat"] = convert_to_decimal(lat, lat_ref)
+                exif_dict["gps_lon"] = convert_to_decimal(lon, lon_ref)
+        
+        return exif_dict
+    
     def add_photo(self, filename: str, filepath: str, caption: str, exif_data: dict):
         """Add a photo to the vector store."""
         
-        # Generate embedding from caption
-        embedding = self.embedding_model.encode(caption)
-        
-        # Build metadata
+        # Build metadata from EXIF data
         metadata = {
             "filename": filename,
             "filepath": filepath,
             "caption": caption,
-            "date_taken": exif_data.get("date_taken"),
-            "date_modified": exif_data.get("date_modified"),
+            "date_taken": exif_data.get("date_taken", ""),
+            "camera_make": exif_data.get("camera_make", ""),
+            "camera_model": exif_data.get("camera_model", ""),
             "gps_lat": exif_data.get("gps_lat"),
             "gps_lon": exif_data.get("gps_lon"),
-            "location": exif_data.get("location"),
-            "camera_make": exif_data.get("camera_make"),
-            "camera_model": exif_data.get("camera_model"),
         }
         
         # Filter out None values
         metadata = {k: v for k, v in metadata.items() if v is not None}
+        
+        # Generate embedding from caption + metadata
+        embedding_text = f"Photo: {caption}"
+        if metadata.get("date_taken"):
+            embedding_text += f". Taken on {metadata['date_taken']}"
+        if metadata.get("camera_make"):
+            embedding_text += f". Camera: {metadata['camera_make']} {metadata.get('camera_model', '')}"
+        
+        embedding = self.embedding_model.encode(embedding_text)
         
         self.collection.add(
             ids=filename,
@@ -208,17 +243,17 @@ results = collection.get(
 ```python
 # Find photos near coordinates
 results = collection.get(
-    where={"location": "Los Angeles, CA"}
+    where={"gps_lat": {"$gte": 34.0, "$lte": 34.1}, "gps_lon": {"$gte": -118.3, "$lte": -118.2}}
 )
 ```
 
 ### Combined Query + Filter
 ```python
-# Find beach photos from California
+# Find beach photos taken with specific camera
 results = collection.query(
     query_texts=["beach vacation"],
     n_results=10,
-    where={"location": {"$contains": "CA"}}
+    where={"camera_make": "Apple"}
 )
 ```
 
@@ -234,6 +269,13 @@ results = collection.query(
 
 ### Optional Fields
 All EXIF fields are optional - photos without EXIF data will have `null` values stored as `None` and filtered out.
+
+Current optional fields:
+- `date_taken`: string (EXIF DateTime format)
+- `gps_lat`: float
+- `gps_lon`: float
+- `camera_make`: string
+- `camera_model`: string
 
 ---
 
@@ -251,5 +293,60 @@ collection.create_index("location")
 
 ---
 
+## 9. Chat History Schema
+
+### Collection Name
+```
+chat_history
+```
+
+### Document Structure
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Unique ID (UUID) |
+| `document` | string | User query text |
+| `metadata` | dict | Response and timestamp data |
+
+### Metadata Fields
+
+| Field | Type | Description | Example |
+|-------|------|-------------|---------|
+| `user_query` | string | The user's query string | "Find photos of sunset" |
+| `response_photos` | string | Comma-separated list of photo IDs | "photo1.jpg,photo2.jpg" |
+| `response_additional_text` | string | Additional text response | "Here are some sunset photos..." |
+| `timestamp` | string | ISO 8601 timestamp | "2026-04-12T15:30:00" |
+
+### Example Record
+
+```python
+{
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "document": "User: Find photos of sunset",
+    
+    "metadata": {
+        "user_query": "Find photos of sunset",
+        "response_photos": "IMG_0001.jpg,IMG_0002.jpg",
+        "response_additional_text": "Here are 2 sunset photos from your collection",
+        "timestamp": "2026-04-12T15:30:00"
+    }
+}
+```
+
+### API Request Format
+
+```python
+# POST /add-history-item
+{
+    "user_query": "Find photos of sunset",
+    "response": {
+        "photos": ["IMG_0001.jpg", "IMG_0002.jpg"],
+        "additional_text": "Here are 2 sunset photos from your collection"
+    }
+}
+```
+
+---
+
 *Schema Version: 1.0*  
-*Last Updated: April 5, 2026*
+*Last Updated: April 12, 2026*
