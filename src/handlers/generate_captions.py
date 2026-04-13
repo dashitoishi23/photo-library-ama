@@ -114,7 +114,9 @@ def create_embedding_text(metadata: dict[str, Any], caption: str) -> str:
         parts.append(f"Taken on {metadata['date_taken']}")
     if metadata.get("camera_make"):
         parts.append(f"Camera: {metadata['camera_make']} {metadata.get('camera_model', '')}")
-    if metadata.get("gps_lat") and metadata.get("gps_lon"):
+    if metadata.get("location"):
+        parts.append(f"Location: {metadata['location']}")
+    elif metadata.get("gps_lat") and metadata.get("gps_lon"):
         parts.append(f"Location: {metadata['gps_lat']}, {metadata['gps_lon']}")
     
     return ". ".join(parts)
