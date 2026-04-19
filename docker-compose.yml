@@ -10,6 +10,8 @@ services:
     environment:
       CHROMA_HOST: chroma
       CHROMA_PORT: 6000
+      LLAMA_PORT: 42069
+      LLAMA_HOST: llama_server
       LLM_BASE_URL: http://llama-server:8080/v1
       PHOTOS_DIR: /mnt/f/immich-photos
       HF_CACHE: /mnt/f/hf-cache
@@ -29,22 +31,24 @@ services:
     ports:
       - "42069:8080"
     volumes:
-      - /mnt/g/models:/mnt/g/models
+      - /mnt/f/models:/mnt/f/models
     environment:
-      LLAMA_ARG_MODEL: /mnt/g/models/Meta-Llama-3-8B-Instruct-Q4_K_M.gguf
+      LLAMA_ARG_MODEL: /mnt/f/models/Qwen_Qwen3.5-9B-Q4_K_M.gguf
       LLAMA_ARG_CTX_SIZE: 4096
       LLAMA_ARG_N_GPU_LAYERS: 99
       LLAMA_ARG_PORT: 8080
       LLAMA_ARG_HOST: 0.0.0.0
       LLAMA_ARG_N_PARALLEL: 1
       LLAMA_ARG_FLASH_ATTN: 1
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
-              count: 1
-              capabilities: [gpu]
+              count: all
+              capabilities: [compute,utility]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s

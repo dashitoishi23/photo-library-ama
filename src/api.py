@@ -3,6 +3,7 @@ from typing import List, Optional
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from src.handlers import index_photos, get_stats, add_history_item, get_history_item
+from src.handlers.agentic_loop import run_agent
 from src.handlers.generate_captions import PhotoIndexingError, ModelLoadError, ChromaDBError
 from src.config import get_settings
 
@@ -21,9 +22,29 @@ class AddHistoryItemResponse(BaseModel):
     id: str
 
 
+class LLMCallRequest(BaseModel):
+    query: str
+    max_iterations: int = 10
+
+
+class ToolCallInfo(BaseModel):
+    tool: str
+    args: dict
+
+
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.post("/llm_call")
+def api_llm_call(request: LLMCallRequest):
+    try:
+        return run_agent(request.query, request.max_iterations)
+    except Exception as e:
+        logger.exception(f"Failed to run agent: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/get-stats")

@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     HF_CACHE: str = "~/.cache/huggingface"
     CHROMA_HOST: str = "chroma"
     CHROMA_PORT: int = 8000
+    LLAMA_HOST: str = "localhost"
+    LLAMA_PORT: int = 42069
 
 
 @lru_cache

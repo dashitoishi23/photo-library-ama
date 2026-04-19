@@ -11,7 +11,7 @@ logger = logging.getLogger("search_photos")
 @tools.register_tool
 def search_photos(
     query: str,
-    n_results: int = 10,
+    n_results: int = 4,
     filters: Optional[dict] = None
 ) -> dict[str, Any]:
     """
