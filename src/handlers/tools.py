@@ -19,7 +19,7 @@ TOOL_SCHEMAS = [
                 "n_results": {
                     "type": "integer",
                     "description": "Number of results to return",
-                    "default": 10
+                    "default": 4
                 }
             },
             "required": ["query"]

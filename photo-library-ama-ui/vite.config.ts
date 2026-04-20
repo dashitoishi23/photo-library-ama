@@ -8,4 +8,12 @@ export default defineConfig({
     react(),
     babel({ presets: [reactCompilerPreset()] })
   ],
+  // server: {
+  //   proxy: {
+  //     '/llm_call': {
+  //       target: 'http://localhost:8000',
+  //       changeOrigin: true
+  //     }
+  //   }
+  // }
 })

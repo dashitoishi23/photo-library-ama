@@ -23,12 +23,12 @@ def run_agent(user_query: str, max_iterations: int = 10) -> dict:
     tool_call = parse_tool_call_from_response(content)
     if tool_call != None:
         result = execute_tool(tool_call[0], tool_call[1])
-        print(f"{result}")
+
     else:
         result = content
 
     
     return {
         "result": result,
-        "tool_call": tool_call
+        "tool_call": tool_call,
     }

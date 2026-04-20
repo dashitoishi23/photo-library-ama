@@ -29,8 +29,8 @@ def search_photos(
     
     try:
         client = chromadb.HttpClient(
-            host=settings.CHROMA_HOST,
-            port=settings.CHROMA_PORT
+            host=settings.chroma_host,
+            port=settings.chroma_port
         )
         collection = client.get_collection("photo_captions")
     except Exception as e:
@@ -57,11 +57,11 @@ def search_photos(
             document = results["documents"][i]
             metadata = results["metadatas"][i] if isinstance(results["metadatas"][i], dict) else {}
             
+            print(f"{metadata}")
             photo_results.append({
                 "id": photo_id,
                 "caption": document,
                 "filename": metadata.get("filename", photo_id),
-                "filepath": metadata.get("filepath", ""),
                 "date_taken": metadata.get("date_taken", ""),
                 "location": metadata.get("location", ""),
                 "camera_make": metadata.get("camera_make", ""),

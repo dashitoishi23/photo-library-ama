@@ -1,6 +1,9 @@
 import logging
+import os
 from typing import List, Optional
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from src.handlers import index_photos, get_stats, add_history_item, get_history_item
 from src.handlers.agentic_loop import run_agent
@@ -11,6 +14,14 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Photo Library AMA")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 class AddHistoryItemRequest(BaseModel):
@@ -36,6 +47,15 @@ class ToolCallInfo(BaseModel):
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/photos/{filename}")
+def get_photo(filename: str):
+    settings = get_settings()
+    filepath = os.path.join(settings.photos_dir, filename)
+    if not os.path.exists(filepath):
+        raise HTTPException(status_code=404, detail="Photo not found")
+    return FileResponse(filepath)
 
 
 @app.post("/llm_call")

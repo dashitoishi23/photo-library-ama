@@ -21,10 +21,14 @@ FROM nginx:alpine
 # Copy custom Nginx configuration
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
+COPY entrypoint.sh /entrypoint.sh
+
+RUN chmod +x /entrypoint.sh
+
 # Copy the built React app from the builder stage
 COPY --from=builder /app/dist /usr/share/nginx/html
 
 EXPOSE 2398
 
 # Command to run Nginx
-CMD ["nginx", "-g", "daemon off;"]
+CMD ["/entrypoint.sh"]

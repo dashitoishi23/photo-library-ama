@@ -25,10 +25,12 @@ def count_chroma_entries(chroma_host: str, chroma_port: int) -> int:
 
 def get_stats() -> dict:
     settings = get_settings()
+
+    print(f"{settings}")
     
-    photo_count = count_photos(settings.PHOTOS_DIR)
+    photo_count = count_photos(settings.photos_dir)
     
-    chroma_count = count_chroma_entries(settings.CHROMA_HOST, settings.CHROMA_PORT)
+    chroma_count = count_chroma_entries(settings.chroma_host, settings.chroma_port)
     
     return {
         "photo_count": photo_count,

@@ -1,7 +1,12 @@
 version: '3.8'
 
+networks:
+  ama-network:
+    driver: bridge
+
 services:
   ama-backend:
+    container_name: ama-backend
     build: .
     ports:
       - "8081:8081"
@@ -9,25 +14,36 @@ services:
       - ./data:/app/data
     environment:
       CHROMA_HOST: chroma
-      CHROMA_PORT: 6000
-      LLAMA_PORT: 42069
+      CHROMA_PORT: 8000
+      LLAMA_PORT: 8080
       LLAMA_HOST: llama_server
-      LLM_BASE_URL: http://llama-server:8080/v1
+      LLM_BASE_URL: http://llama_server:8080/v1
       PHOTOS_DIR: /mnt/f/immich-photos
       HF_CACHE: /mnt/f/hf-cache
+    networks:
+      - ama-network
     depends_on:
-      llama-server:
+      llama_server:
         condition: service_healthy
+      chroma:
+        condition: service_started
 
   ama-frontend:
+    container_name: ama-frontend
     build: ./photo-library-ama-ui
     ports:
       - "2398:2398"
+    environment:
+      VITE_BACKEND_HOST: localhost
+      VITE_BACKEND_PORT: 8081
+    networks:
+      - ama-network
     depends_on:
       - ama-backend
 
-  llama-server:
-    image: ghcr.io/ggml-org/llama.cpp:server-cuda
+  llama_server:
+    container_name: llama_server
+    image: ghcr.io/ggml-org/llama.cpp:server-cuda13
     ports:
       - "42069:8080"
     volumes:
@@ -42,6 +58,8 @@ services:
       LLAMA_ARG_FLASH_ATTN: 1
       NVIDIA_VISIBLE_DEVICES: all
       NVIDIA_DRIVER_CAPABILITIES: compute,utility
+    networks:
+      - ama-network
     deploy:
       resources:
         reservations:
@@ -57,8 +75,11 @@ services:
       start_period: 60s
 
   chroma:
+    container_name: chroma
     image: chromadb/chroma:latest
     ports:
       - "6000:8000"
     volumes:
       - ./data/chroma_db:/data
+    networks:
+      - ama-network
