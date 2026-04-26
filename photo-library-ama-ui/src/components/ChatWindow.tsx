@@ -17,19 +17,13 @@ interface LLMResponse {
   photo_metadata?: PhotoMetadata[]
 }
 
-// interface ResponseData {
-//   user_query: string
-//   response_photos: string[]
-//   response_additional_text: string
-//   timestamp: string
-// }
-
 export function ChatWindow() {
   const [messages, setMessages] = useState<Message[]>([
     { id: '1', role: 'assistant', content: 'Hello! I can answer questions about your photos. Ask me anything!' }
   ])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
+  const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null)
 
   const handleSend = async () => {
     if (!input.trim() || loading) return
@@ -104,7 +98,12 @@ export function ChatWindow() {
               <div className="message-photos">
                 {msg.photos.slice(0, 4).map((photo, idx) => (
                   <div key={idx} className="photo-tooltip-container">
-                    <img src={`${API_URL}/photos/${photo}`} alt={`Photo ${idx + 1}`} />
+                    <img 
+                      src={`${API_URL}/photos/${photo}`} 
+                      alt={`Photo ${idx + 1}`}
+                      onClick={() => setSelectedPhoto(photo)}
+                      style={{ cursor: 'pointer' }}
+                    />
                   </div>
                 ))}
               </div>
@@ -125,6 +124,15 @@ export function ChatWindow() {
           {loading ? 'Sending...' : 'Send'}
         </button>
       </div>
+      {selectedPhoto && (
+        <div className="photo-popup" onClick={() => setSelectedPhoto(null)}>
+          <img 
+            src={`${API_URL}/photos/${selectedPhoto}`} 
+            alt="Full size" 
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </main>
   )
 }
