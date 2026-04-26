@@ -144,8 +144,8 @@ from sentence_transformers import SentenceTransformer
 import piexif
 
 class PhotoVectorStore:
-    def __init__(self, chroma_host: str, chroma_port: int):
-        self.client = chromadb.HttpClient(host=chroma_host, port=chroma_port)
+    def __init__(self, CHROMA_HOST: str, CHROMA_PORT: int):
+        self.client = chromadb.HttpClient(host=CHROMA_HOST, port=CHROMA_PORT)
         self.collection = self.client.get_or_create_collection(
             name="photo_captions",
             metadata={"hnsw:space": "cosine"}

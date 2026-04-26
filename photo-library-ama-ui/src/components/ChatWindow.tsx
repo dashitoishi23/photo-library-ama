@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { Message } from '../types'
+import type { Message, PhotoMetadata } from '../types'
 import { env } from '../env'
 
 const API_URL = `http://${env.VITE_BACKEND_HOST}:${env.VITE_BACKEND_PORT}`
@@ -14,14 +14,15 @@ interface LLMResponse {
     }
   } | null
   photo_results: string
+  photo_metadata?: PhotoMetadata[]
 }
 
-interface ResponseData {
-  user_query: string
-  response_photos: string[]
-  response_additional_text: string
-  timestamp: string
-}
+// interface ResponseData {
+//   user_query: string
+//   response_photos: string[]
+//   response_additional_text: string
+//   timestamp: string
+// }
 
 export function ChatWindow() {
   const [messages, setMessages] = useState<Message[]>([
@@ -55,25 +56,29 @@ export function ChatWindow() {
       
       let content = ''
       let photos: string[] = []
+      let photoMetadata: PhotoMetadata[] = []
 
-      let responseData: ResponseData = {
-        user_query: '',
-        response_photos: [],
-        response_additional_text: '',
-        timestamp: ''
-      };
+      // let responseData: ResponseData = {
+      //   user_query: '',
+      //   response_photos: [],
+      //   response_additional_text: '',
+      //   timestamp: ''
+      // };
       
       if (data.tool_call === null) {
         content = data.result || ''
       } else {
-        photos = (data.result as any).results[0].id || []
+        const searchResults = (data.result as any).results || []
+        photos = searchResults.map((r: PhotoMetadata) => r.id)
+        photoMetadata = searchResults
       }
       
       const assistantMsg: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
         content,
-        photos
+        photos,
+        photoMetadata
       }
       setMessages(prev => [...prev, assistantMsg])
     } catch (error) {
@@ -98,7 +103,9 @@ export function ChatWindow() {
             {msg.photos && msg.photos.length > 0 && (
               <div className="message-photos">
                 {msg.photos.slice(0, 4).map((photo, idx) => (
-                  <img key={idx} src={`${API_URL}/photos/${photo}`} alt={`Photo ${idx + 1}`} />
+                  <div key={idx} className="photo-tooltip-container">
+                    <img src={`${API_URL}/photos/${photo}`} alt={`Photo ${idx + 1}`} />
+                  </div>
                 ))}
               </div>
             )}

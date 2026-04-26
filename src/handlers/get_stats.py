@@ -9,13 +9,13 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-def count_photos(photos_dir: str) -> int:
-    pattern = os.path.join(photos_dir, "*.jpg")
+def count_photos(PHOTOS_DIR: str) -> int:
+    pattern = os.path.join(PHOTOS_DIR, "*.jpg")
     return len(glob.glob(pattern))
 
 
-def count_chroma_entries(chroma_host: str, chroma_port: int) -> int:
-    client = chromadb.HttpClient(host=chroma_host, port=chroma_port)
+def count_chroma_entries(CHROMA_HOST: str, CHROMA_PORT: int) -> int:
+    client = chromadb.HttpClient(host=CHROMA_HOST, port=CHROMA_PORT)
     try:
         collection = client.get_collection("photo_captions")
     except Exception:
@@ -28,9 +28,9 @@ def get_stats() -> dict:
 
     print(f"{settings}")
     
-    photo_count = count_photos(settings.photos_dir)
+    photo_count = count_photos(settings.PHOTOS_DIR)
     
-    chroma_count = count_chroma_entries(settings.chroma_host, settings.chroma_port)
+    chroma_count = count_chroma_entries(settings.CHROMA_HOST, settings.CHROMA_PORT)
     
     return {
         "photo_count": photo_count,

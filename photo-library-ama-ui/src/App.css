@@ -196,6 +196,42 @@
   display: block;
 }
 
+.photo-tooltip-container {
+  position: relative;
+  width: 100%;
+  height: 150px;
+}
+
+.photo-tooltip-container img {
+  width: 100%;
+  height: 150px;
+  object-fit: cover;
+  border-radius: 8px;
+  display: block;
+}
+
+.info-icon {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  color: white;
+  border: none;
+  font-size: 14px;
+  font-weight: bold;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.info-icon:hover {
+  background: rgba(0, 0, 0, 0.8);
+}
+
 .message.assistant:has(.message-photos) {
   max-width: 100%;
   width: 100%;

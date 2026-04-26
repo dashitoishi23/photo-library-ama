@@ -51,8 +51,8 @@ def error_handler(func):
     return wrapper
 
 
-def get_photo_files(photos_dir: str) -> list[str]:
-    pattern = os.path.join(photos_dir, "*.jpg")
+def get_photo_files(PHOTOS_DIR: str) -> list[str]:
+    pattern = os.path.join(PHOTOS_DIR, "*.jpg")
     return sorted(glob.glob(pattern))
 
 
@@ -127,14 +127,14 @@ def get_models():
     global _blip2_processor, _blip2_model, _embedding_model
 
     settings = get_settings()
-    hf_cache = settings.HF_CACHE
+    HF_CACHE = settings.HF_CACHE
 
-    logger.info(f"HF_CACHE ==== {hf_cache}")
+    logger.info(f"HF_CACHE ==== {HF_CACHE}")
     
     if _blip2_processor is None:
         try:
             logger.info("Loading BLIP-2 model...")
-            _blip2_processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b", cache_dir=hf_cache)
+            _blip2_processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b", cache_dir=HF_CACHE)
             _blip2_model = Blip2ForConditionalGeneration.from_pretrained(
                 "Salesforce/blip2-opt-2.7b",
                 torch_dtype=torch.float16
@@ -163,21 +163,21 @@ def get_models():
 
 
 @error_handler
-def index_photos(photos_dir: str, chroma_host: str, chroma_port: int) -> dict:
+def index_photos(PHOTOS_DIR: str, CHROMA_HOST: str, CHROMA_PORT: int) -> dict:
     processor, model, embedding_model = get_models()
     
-    photo_files = get_photo_files(photos_dir)
+    photo_files = get_photo_files(PHOTOS_DIR)
     if not photo_files:
         return {"status": "ok", "indexed": 0, "message": "No photos found"}
     
     try:
-        client = chromadb.HttpClient(host=chroma_host, port=chroma_port)
+        client = chromadb.HttpClient(host=CHROMA_HOST, port=CHROMA_PORT)
         collection = client.get_or_create_collection(
             "photo_captions",
             metadata={"hnsw:space": "cosine"}
         )
     except Exception as e:
-        logger.exception(f"Failed to connect to ChromaDB at {chroma_host}:{chroma_port}")
+        logger.exception(f"Failed to connect to ChromaDB at {CHROMA_HOST}:{CHROMA_PORT}")
         raise ChromaDBError(f"Failed to connect to ChromaDB: {e}")
     
     try:

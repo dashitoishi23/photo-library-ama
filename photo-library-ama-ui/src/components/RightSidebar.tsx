@@ -5,6 +5,7 @@ const API_URL = `http://${env.VITE_BACKEND_HOST}:${env.VITE_BACKEND_PORT}`
 
 export interface RightSidebarProps {
   onGenerateCaptions: () => void
+  isGenerating: boolean
 }
 
 interface Stats {
@@ -12,7 +13,7 @@ interface Stats {
   vector_db_entries: number
 }
 
-export function RightSidebar({ onGenerateCaptions }: RightSidebarProps) {
+export function RightSidebar({ onGenerateCaptions, isGenerating }: RightSidebarProps) {
   const [stats, setStats] = useState<Stats>({ total_photos: 0, vector_db_entries: 0 })
   const [loading, setLoading] = useState(true)
 
@@ -20,8 +21,8 @@ export function RightSidebar({ onGenerateCaptions }: RightSidebarProps) {
     fetch(`${API_URL}/get-stats`)
       .then(res => res.json())
       .then(data => setStats({
-        total_photos: data.total_photos || 0,
-        vector_db_entries: data.vector_db_entries || 0
+        total_photos: data.photo_count || 0,
+        vector_db_entries: data.chroma_count || 0
       }))
       .catch(console.error)
       .finally(() => setLoading(false))
@@ -49,8 +50,8 @@ export function RightSidebar({ onGenerateCaptions }: RightSidebarProps) {
             <span>Photos: {total_photos} | Vectors: {vector_db_entries}</span>
           </div>
         )}
-        <button className="generate-btn" onClick={onGenerateCaptions}>
-          Generate Captions
+        <button className="generate-btn" onClick={onGenerateCaptions} disabled={isGenerating}>
+          {isGenerating ? 'Generating...' : 'Generate Captions'}
         </button>
       </div>
     </aside>

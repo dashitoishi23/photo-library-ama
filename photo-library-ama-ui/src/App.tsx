@@ -4,16 +4,21 @@ import { LeftSidebar } from './components/LeftSidebar'
 import { ChatWindow } from './components/ChatWindow'
 import { RightSidebar } from './components/RightSidebar'
 import './App.css'
+import { env } from './env'
+
+const API_URL = `http://${env.VITE_BACKEND_HOST}:${env.VITE_BACKEND_PORT}`
 
 function App() {
-  const [chatHistory] = useState<ChatHistory[]>([
-    { id: '1', title: 'Beach vacation photos' },
-    { id: '2', title: 'Dog photos' },
-    { id: '3', title: '2024 events' }
-  ])
+  const [chatHistory] = useState<ChatHistory[]>([])
+  const [isGenerating, setIsGenerating] = useState(false)
 
-  const handleGenerateCaptions = () => {
-    console.log('Generate captions clicked')
+  const handleGenerateCaptions = async () => {
+    setIsGenerating(true)
+    try {
+      await fetch(`${API_URL}/generate-captions`)
+    } finally {
+      setIsGenerating(false)
+    }
   }
 
   return (
@@ -22,6 +27,7 @@ function App() {
       <ChatWindow />
       <RightSidebar
         onGenerateCaptions={handleGenerateCaptions}
+        isGenerating={isGenerating}
       />
     </div>
   )

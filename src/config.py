@@ -9,12 +9,12 @@ class Settings(BaseSettings):
         extra="allow"
     )
 
-    # PHOTOS_DIR: str = "/app/photos"
-    # HF_CACHE: str = "~/.cache/huggingface"
-    # CHROMA_HOST: str = "localhost"
-    # CHROMA_PORT: int = 6000
-    # LLAMA_HOST: str = "localhost"
-    # LLAMA_PORT: int = 42069
+    PHOTOS_DIR: str = "/app/photos"
+    HF_CACHE: str = "~/.cache/huggingface"
+    CHROMA_HOST: str = "localhost"
+    CHROMA_PORT: int = 6000
+    LLAMA_HOST: str = "localhost"
+    LLAMA_PORT: int = 42069
 
 
 @lru_cache

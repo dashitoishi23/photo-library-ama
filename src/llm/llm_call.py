@@ -8,7 +8,8 @@ def llm_call(
     max_tokens: int = 500
 ) -> dict[str, Any]:
     settings = get_settings()
-    url = f"http://{settings.llama_host}:{settings.llama_port}/v1/chat/completions"
+    print(f"{settings}")
+    url = f"http://{settings.LLAMA_HOST}:{settings.LLAMA_PORT}/v1/chat/completions"
     
     payload = {
         "model": "local-model",

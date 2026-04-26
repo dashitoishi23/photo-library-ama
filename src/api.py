@@ -52,7 +52,8 @@ def health():
 @app.get("/photos/{filename}")
 def get_photo(filename: str):
     settings = get_settings()
-    filepath = os.path.join(settings.photos_dir, filename)
+    print(f"{settings}")
+    filepath = os.path.join(settings.PHOTOS_DIR, filename)
     if not os.path.exists(filepath):
         raise HTTPException(status_code=404, detail="Photo not found")
     return FileResponse(filepath)
@@ -118,7 +119,6 @@ def index():
 @app.post("/generate-captions")
 def generate_captions():
     settings = get_settings()
-    logger.info(f"{settings.PHOTOS_DIR}")
     # logger.info(f"Photos dir: {settings.PHOTOS_DIR}, Chroma host: {settings.CHROMA_HOST}")
     
     try:
