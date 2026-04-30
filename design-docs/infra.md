@@ -12,11 +12,11 @@ The application runs three services:
 
 | Service | Image | Port | Purpose |
 |---|---|---|---|
-| `llama-server` | `ghcr.io/ggml-org/llama.cpp:server-cuda` | `8080` | LLM inference (Llama 3.3 8B) |
-| `chromadb` | `chromadb/chroma:1.5.3` | `8001` | Vector database |
-| `api` | `./Dockerfile` (FastAPI) | `8000` | Application backend + static file serving |
+| `llama-server` | `ghcr.io/ggml-org/llama.cpp:server-cuda13` | `8080` | LLM inference (Qwen 3.5 9B) |
+| `chroma` | `chromadb/chroma:latest` | `8000` | Vector database |
+| `ama-backend` | `./Dockerfile` (FastAPI) | `8081` | Application backend + static file serving |
 
-The LLaVA captioning pipeline (`src/caption.py`) runs **outside Docker** as a one-time batch job directly on the host, using the GPU via the `transformers` library. It writes `data/captions.json` before any services are started.
+The Qwen captioning pipeline (`src/handlers/generate_captions.py`) runs **outside Docker** as a one-time batch job directly on the host, using the GPU via the `transformers` library. It writes `data/captions.json` before any services are started.
 
 ---
 
@@ -56,12 +56,11 @@ mkdir -p models
 
 pip install huggingface_hub
 
-huggingface-cli download bartowski/Meta-Llama-3-8B-Instruct-GGUF \
-  Meta-Llama-3-8B-Instruct-Q4_K_M.gguf \
+huggingface-cli download Qwen/Qwen3.5-9B-Q4_K_M.gguf \
   --local-dir ./models
 ```
 
-Expected file: `./models/Meta-Llama-3-8B-Instruct-Q4_K_M.gguf` (~5.5 GB)
+Expected file: `./models/Qwen_Qwen3.5-9B-Q4_K_M.gguf` (~5.5 GB)
 
 ---
 
@@ -72,10 +71,10 @@ Expected file: `./models/Meta-Llama-3-8B-Instruct-Q4_K_M.gguf` (~5.5 GB)
 The official image published by the llama.cpp team on GitHub Container Registry:
 
 ```
-ghcr.io/ggml-org/llama.cpp:server-cuda
+ghcr.io/ggml-org/llama.cpp:server-cuda13
 ```
 
-This tag includes only `llama-server`, compiled with CUDA 12 support. No extra build steps are required.
+This tag includes only `llama-server`, compiled with CUDA 13 support. No extra build steps are required.
 
 ### Standalone `docker run` (for testing)
 
@@ -85,13 +84,14 @@ Use this to verify the model loads and the GPU is being used before wiring up th
 docker run --rm \
   --gpus all \
   -p 8080:8080 \
-  -v ./models:/models \
-  -e LLAMA_ARG_MODEL=/models/Meta-Llama-3-8B-Instruct-Q4_K_M.gguf \
+  -v ./models:/app/models \
+  -e LLAMA_ARG_MODEL=/app/models/Qwen_Qwen3.5-9B-Q4_K_M.gguf \
   -e LLAMA_ARG_CTX_SIZE=4096 \
   -e LLAMA_ARG_N_GPU_LAYERS=99 \
   -e LLAMA_ARG_HOST=0.0.0.0 \
   -e LLAMA_ARG_PORT=8080 \
-  ghcr.io/ggml-org/llama.cpp:server-cuda
+  -e CUDA_VERSION=13.2.0 \
+  ghcr.io/ggml-org/llama.cpp:server-cuda13
 ```
 
 Check it is healthy and using the GPU:
@@ -117,7 +117,7 @@ curl http://localhost:8080/v1/chat/completions \
 
 | Variable | Value | Notes |
 |---|---|---|
-| `LLAMA_ARG_MODEL` | `/models/Meta-Llama-3-8B-Instruct-Q4_K_M.gguf` | Path inside container |
+| `LLAMA_ARG_MODEL` | `/app/models/Qwen_Qwen3.5-9B-Q4_K_M.gguf` | Path inside container |
 | `LLAMA_ARG_CTX_SIZE` | `4096` | Context window — sufficient for RAG prompt + captions |
 | `LLAMA_ARG_N_GPU_LAYERS` | `99` | Offload all layers to RTX 3060; model fits in 12GB VRAM |
 | `LLAMA_ARG_HOST` | `0.0.0.0` | Required for container networking |
@@ -134,29 +134,33 @@ curl http://localhost:8080/v1/chat/completions \
 ```yaml
 services:
 
-  llama-server:
-    image: ghcr.io/ggml-org/llama.cpp:server-cuda
-    container_name: llama-server
+  llama_server:
+    image: ghcr.io/ggml-org/llama.cpp:server-cuda13
+    container_name: llama_server
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "42069:8080"
     volumes:
-      - ./models:/models
+      - ./models:/app/models
     environment:
-      LLAMA_ARG_MODEL: /models/Meta-Llama-3-8B-Instruct-Q4_K_M.gguf
+      CUDA_VERSION: 13.2.0
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+      LLAMA_ARG_MODEL: /app/models/Qwen_Qwen3.5-9B-Q4_K_M.gguf
       LLAMA_ARG_CTX_SIZE: 4096
       LLAMA_ARG_N_GPU_LAYERS: 99
       LLAMA_ARG_HOST: 0.0.0.0
       LLAMA_ARG_PORT: 8080
       LLAMA_ARG_N_PARALLEL: 1
       LLAMA_ARG_FLASH_ATTN: 1
+    runtime: nvidia
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
-              count: 1
-              capabilities: [gpu]
+              count: all
+              capabilities: [compute,utility]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
@@ -166,12 +170,12 @@ services:
     networks:
       - ama-net
 
-  chromadb:
-    image: chromadb/chroma:1.5.3
-    container_name: chromadb
+  chroma:
+    image: chromadb/chroma:latest
+    container_name: chroma
     restart: unless-stopped
     ports:
-      - "8001:8000"       # host:8001 to avoid conflict with api:8000
+      - "6000:8000"
     volumes:
       - ./data/chroma_db:/data
     healthcheck:
@@ -182,26 +186,26 @@ services:
     networks:
       - ama-net
 
-  api:
+  ama-backend:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: ama-api
+    container_name: ama-backend
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "8081:8081"
     volumes:
-      - ./data:/app/data           # captions.json, chroma_db access
-      - ./photos:/app/photos:ro    # photo files served as static assets
+      - ./data:/app/data
+      - /mnt/f/immich-photos:/app/photos:ro
     environment:
-      CHROMA_HOST: chromadb
+      CHROMA_HOST: chroma
       CHROMA_PORT: 8000
-      LLM_BASE_URL: http://llama-server:8080/v1
+      LLM_BASE_URL: http://llama_server:8080/v1
     depends_on:
-      llama-server:
+      llama_server:
         condition: service_healthy
-      chromadb:
-        condition: service_healthy
+      chroma:
+        condition: service_started
     networks:
       - ama-net
 
@@ -246,42 +250,80 @@ docker compose down -v
 HOST MACHINE (Linux, RTX 3060 12GB, 48GB DDR4)
 │
 │  [One-time batch — runs on host, not in Docker]
-│  $ python -m src.caption --input /photos --output data/captions.json
-│  $ python -m src.vector_store --captions data/captions.json
+│  $ python -m src.handlers.generate_captions --input /photos --output data/captions.json
+│  $ python -m src.handlers.vector_store --captions data/captions.json
 │
 └─── Docker: bridge network "ama-net" ─────────────────────────────────────┐
      │                                                                       │
      │   ┌─────────────────────┐                                            │
-     │   │    ama-api          │                                            │
-     │   │    FastAPI          │◄──── host port 8000 ◄──── Browser / User  │
-     │   │    :8000            │                                            │
+     │   │    ama-backend       │                                            │
+     │   │    FastAPI          │◄──── host port 8081 ◄──── Browser / User   │
+     │   │    :8081            │                                            │
      │   └──────┬─────────┬───┘                                            │
      │          │         │                                                  │
      │          │         │  HTTP /v1/chat/completions                      │
      │          │         └──────────────────────────►┌──────────────────┐ │
-     │          │                                      │  llama-server    │ │
-     │   chromadb HttpClient                           │  llama.cpp       │ │
-     │          │                                      │  :8080           │ │
-     │          ▼                                      │  [GPU: RTX 3060] │ │
-     │   ┌─────────────┐                              └──────────────────┘ │
-     │   │  chromadb   │                                                    │
+     │   chromadb HttpClient                           │  llama_server     │ │
+     │          │                                      │  llama.cpp       │ │
+     │          ▼                                      │  :8080           │ │
+     │   ┌─────────────┐                              │  [GPU: RTX 3060] │ │
+     │   │  chromadb   │                              └──────────────────┘ │
      │   │  :8000      │                                                    │
      │   │  (Chroma    │                                                    │
      │   │   server)   │                                                    │
      │   └─────────────┘                                                    │
      │                                                                       │
      │   Exposed to host:                                                    │
-     │     localhost:8000  →  ama-api                                       │
-     │     localhost:8001  →  chromadb  (dev access only)                   │
-     │     localhost:8080  →  llama-server  (dev access only)               │
+     │     localhost:8081  →  ama-backend                                   │
+     │     localhost:6000  →  chroma  (dev access only)                    │
+     │     localhost:42069  →  llama_server  (dev access only)            │
      │                                                                       │
-└───────────────────────────────────────────────────────────────────────────┘
+     └───────────────────────────────────────────────────────────────────────┘
 
 Bind mounts:
-  ./models          →  llama-server:/models   (GGUF model file)
-  ./data/chroma_db  →  chromadb:/data         (vector store persistence)
-  ./data            →  ama-api:/app/data      (captions.json)
-  ./photos          →  ama-api:/app/photos    (photo files, read-only)
+  ./models          →  llama_server:/app/models   (GGUF model file)
+  ./data/chroma_db  →  chroma:/data         (vector store persistence)
+  ./data            →  ama-backend:/app/data      (captions.json)
+  /mnt/f/immich-photos →  ama-backend:/app/photos  (photo files, read-only)
+```
+HOST MACHINE (Linux, RTX 3060 12GB, 48GB DDR4)
+│
+│  [One-time batch — runs on host, not in Docker]
+│  $ python -m src.handlers.generate_captions --input /photos --output data/captions.json
+│
+└─── Docker: bridge network "ama-net" ─────────────────────────────────────┐
+     │                                                                       │
+     │   ┌─────────────────────┐                                            │
+     │   │    ama-backend      │                                            │
+     │   │    FastAPI          │◄──── host port 8081 ◄──── Browser / User   │
+     │   │    :8081            │                                            │
+     │   └──────┬─────────┬───┘                                            │
+     │          │         │                                                  │
+     │          │         │  HTTP /v1/chat/completions                      │
+     │          │         └──────────────────────────►┌──────────────────┐ │
+     │          │                                      │  llama_server   │ │
+     │   chromadb HttpClient                           │  llama.cpp      │ │
+     │          │                                      │  :8080          │ │
+     │          ▼                                      │  [GPU: RTX 3060]│ │
+     │   ┌─────────────┐                              └──────────────────┘ │
+     │   │  chroma     │                                                    │
+     │   │  :8000      │                                                    │
+     │   │  (Chroma     │                                                    │
+     │   │   server)   │                                                    │
+     │   └─────────────┘                                                    │
+     │                                                                       │
+     │   Exposed to host:                                                    │
+     │     localhost:8081  →  ama-backend                                   │
+     │     localhost:6000  →  chroma  (dev access only)                      │
+     │     localhost:42069  →  llama_server  (dev access only)              │
+     │                                                                       │
+     └───────────────────────────────────────────────────────────────────────────┘
+
+Bind mounts:
+  ./models          →  llama_server:/app/models   (GGUF model file)
+  ./data/chroma_db  →  chroma:/data         (vector store persistence)
+  ./data            →  ama-backend:/app/data      (captions.json)
+  /mnt/f/immich-photos →  ama-backend:/app/photos  (photo files, read-only)
 ```
 
 ---
@@ -290,27 +332,27 @@ Bind mounts:
 
 | Port (host) | Service | Exposed to |
 |---|---|---|
-| `8000` | `ama-api` (FastAPI) | Public — browser, frontend |
-| `8001` | `chromadb` | Dev only — direct DB inspection |
-| `8080` | `llama-server` | Dev only — direct LLM testing |
+| `8081` | `ama-backend` (FastAPI) | Public — browser, frontend |
+| `6000` | `chroma` | Dev only — direct DB inspection |
+| `42069` | `llama_server` | Dev only — direct LLM testing |
 
-In production, only port `8000` should be exposed. Ports `8001` and `8080` are internal services that the `ama-api` container accesses over `ama-net` by service name, not via the host.
+In production, only port `8081` should be exposed. Ports `6000` and `42069` are internal services that the `ama-backend` container accesses over `ama-net` by service name, not via the host.
 
 ---
 
 ## Troubleshooting
 
-**`llama-server` starts but uses CPU instead of GPU**  
+**`llama_server` starts but uses CPU instead of GPU**  
 The NVIDIA Container Toolkit is not configured correctly. Re-run `nvidia-ctk runtime configure --runtime=docker` and restart Docker. Confirm with `docker run --gpus all nvidia/cuda:12.4.0-base-ubuntu22.04 nvidia-smi`.
 
-**`api` starts before `llama-server` is ready**  
+**`ama-backend` starts before `llama_server` is ready**  
 The `depends_on: condition: service_healthy` block handles this, but `start_period: 60s` in the healthcheck gives the model time to load. If the model file is large and storage is slow, increase `start_period` to `120s`.
 
 **ChromaDB data is lost after `docker compose down`**  
 Only `docker compose down -v` removes volumes. Plain `docker compose down` preserves the `./data/chroma_db` bind mount on the host. Ensure you are not accidentally using a named volume instead of a bind mount.
 
-**Port 8000 conflict**  
-If something on the host is already using port 8000, change the host-side mapping in `docker-compose.yml` to e.g. `"8080:8080"` for the api service. Internal container networking is unaffected.
+**Port 8081 conflict**  
+If something on the host is already using port 8081, change the host-side mapping in `docker-compose.yml` to e.g. `"8082:8081"` for the ama-backend service. Internal container networking is unaffected.
 
 ---
 

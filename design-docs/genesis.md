@@ -1,7 +1,7 @@
 # Genesis: RAG-Powered Photo Collection Chatbot
 
-**Date:** April 5, 2026  
-**Status:** Planning Complete → Build Mode Engaged
+**Date:** April 30, 2026  
+**Status:** Design Document
 
 ---
 
@@ -48,7 +48,7 @@ This document outlines the architecture and implementation plan for building a R
 | Captioning Model | BLIP-2 (Salesforce) | Fast, lightweight, quality captions |
 | Embedding Model | sentence-transformers/all-MiniLM-L6-v2 | Fast, efficient embeddings |
 | Vector Database | Chroma | Python-native, simple setup |
-| LLM | Llama-3.1-8B-Instruct (GGUF) | Locally hosted, instruction-tuned |
+| LLM | Qwen 3.5 9B (Qwen3.5-9B-Q4_K_M.gguf) | Locally hosted, instruction-tuned |
 | LLM Runtime | llama.cpp (CUDA-enabled) | GPU acceleration |
 
 ---
@@ -182,8 +182,7 @@ CMAKE_CUDA=on pip install llama-cpp-python
 | Q5_K_S | ~10GB | Higher |
 
 **Download Source:**
-- HuggingFace: `uygarkurt/Llama-3.1-8B-Instruct-GGUF`
-- Or: `TheBloke/Llama-3.1-8B-Instruct-GGUF`
+- HuggingFace: `Qwen/Qwen3.5-9B-Q4_K_M.gguf`
 
 ---
 
@@ -246,7 +245,7 @@ photo-library-ama/
 │   ├── captions.json         # Generated captions with EXIF
 │   └── chroma_db/           # Persisted vector database
 ├── models/
-│   └── Llama-3.1-8B-Instruct-Q4_K_M.gguf
+│   └── Qwen3.5-9B-Q4_K_M.gguf
 ├── requirements.txt
 └── README.md
 ```

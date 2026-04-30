@@ -47,9 +47,12 @@ services:
     ports:
       - "42069:8080"
     volumes:
-      - /mnt/f/models:/mnt/f/models
+      - f:/models:/app/models
     environment:
-      LLAMA_ARG_MODEL: /mnt/f/models/Qwen_Qwen3.5-9B-Q4_K_M.gguf
+      CUDA_VERSION: 13.2.0
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+      LLAMA_ARG_MODEL: /app/models/Qwen_Qwen3.5-9B-Q4_K_M.gguf
       LLAMA_ARG_CTX_SIZE: 4096
       LLAMA_ARG_N_GPU_LAYERS: 99
       LLAMA_ARG_PORT: 8080
@@ -63,8 +66,8 @@ services:
         reservations:
           devices:
             - driver: nvidia
-              count: all
-              capabilities: [gpu]
+              count: 1
+              capabilities: [gpu, compute, utility]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
