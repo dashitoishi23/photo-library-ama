@@ -8,7 +8,7 @@ export function LeftSidebar({ chatHistory }: LeftSidebarProps) {
   return (
     <aside className="sidebar-left">
       <div className="sidebar-header">
-        <h2>Chat History</h2>
+        <h2>Photo Library AMA</h2>
       </div>
       <div className="chat-list">
         {chatHistory.map(chat => (
