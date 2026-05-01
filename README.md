@@ -6,6 +6,8 @@ A RAG-powered chatbot that answers questions about your personal photo collectio
 
 ## What It Does
 
+![Flow Diagram](design-docs/flow-diagram.png)
+
 ```
 Photos → EXIF Extraction → Captioning (BLIP-2/Qwen VLA) → ChromaDB (vector store)
                                                                       ↓
