@@ -2,12 +2,12 @@ from src.llm.generate_system_prompt import generate_system_prompt
 from src.llm.llm_call import llm_call
 from src.handlers.tools import parse_tool_call_from_response, execute_tool
 
+messages = []
+system_prompt = generate_system_prompt()
+messages.append({"role": "system", "content": system_prompt})
 
 def run_agent(user_query: str, max_iterations: int = 10) -> dict:
-    messages = []
     
-    system_prompt = generate_system_prompt()
-    messages.append({"role": "system", "content": system_prompt})
     messages.append({"role": "user", "content": user_query})
 
     result = {}

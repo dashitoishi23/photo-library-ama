@@ -7,9 +7,9 @@ A RAG-powered chatbot that answers questions about your personal photo collectio
 ## What It Does
 
 ```
-Photos → EXIF Extraction → Captioning (BLIP-2) → ChromaDB (vector store)
-                                                              ↓
-User Query → Semantic Search → LLM (Llama-3.3-8B) → Answer
+Photos → EXIF Extraction → Captioning (BLIP-2/Qwen VLA) → ChromaDB (vector store)
+                                                                      ↓
+User Query → Semantic Search → LLM (Qwen 3.5 9B) → Answer
 ```
 
 Ask questions like:
@@ -26,110 +26,44 @@ Ask questions like:
 | Captioning | BLIP-2 (Salesforce) |
 | Embeddings | sentence-transformers/all-MiniLM-L6-v2 |
 | Vector DB | Chroma (persistent) |
-| LLM | Llama-3.3-8B-Instruct (Q4_K_M GGUF) |
-| LLM Runtime | llama.cpp (CUDA, Docker) |
+| LLM | Qwen 3.5 9B (Q4_K_M GGUF) |
+| LLM Runtime | llama.cpp (CUDA 13, Docker) |
 | App Framework | FastAPI |
+| Frontend | Vite + React |
+
+---
+
+## Prerequisites
+
+- NVIDIA GPU with CUDA (RTX 3060 12GB recommended)
+- Docker + Docker Compose
+- NVIDIA Container Toolkit for GPU passthrough
+
+```bash
+# Verify GPU passthrough
+docker run --gpus all nvidia/cuda:12.4.0-base-ubuntu22.04 nvidia-smi
+```
 
 ---
 
 ## Setup
 
-### 1. Download Model
+### 1. Download LLM Model
 
 ```bash
 mkdir -p models
-huggingface-cli download bartowski/Llama-3.3-8B-Instruct-GGUF \
-  Llama-3.3-8B-Instruct-Q4_K_M.gguf --local-dir ./models
+huggingface-cli download Qwen/Qwen3.5-9B-Q4_K_M.gguf --local-dir ./models
 ```
 
-### 2. Launch llama.cpp
+Expected file: `./models/Qwen_Qwen3.5-9B-Q4_K_M.gguf`
 
-```yaml
-# docker-compose.yml
-version: '3.8'
-services:
-  llama-server:
-    image: ghcr.io/ggml-org/llama.cpp:server-cuda
-    ports:
-      - "8080:8080"
-    volumes:
-      - ./models:/models
-    environment:
-      LLAMA_ARG_MODEL: /models/Llama-3.3-8B-Instruct-Q4_K_M.gguf
-      LLAMA_ARG_CTX_SIZE: 4096
-      LLAMA_ARG_N_GPU_LAYERS: 99
-      LLAMA_ARG_PORT: 8080
-      LLAMA_ARG_HOST: 0.0.0.0
-      LLAMA_ARG_N_PARALLEL: 1
-      LLAMA_ARG_FLASH_ATTN: 1
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
-```
+### 2. Photo Directory
+
+Photos are read from `/mnt/f/immich-photos` (configured in docker-compose.yml). Ensure this path contains your images.
+
+### 3. Run with Docker Compose
 
 ```bash
-docker compose up -d
-curl http://localhost:8080/health
-```
-
-### 3. Launch AMA + ChromaDB
-
-```yaml
-# docker-compose.yml (replace the above)
-version: '3.8'
-services:
-  chroma:
-    image: chromadb/chroma:latest
-    ports:
-      - "8000:8000"
-    volumes:
-      - ./data/chroma_db:/data
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  ama:
-    build: .
-    ports:
-      - "8001:8000"
-    environment:
-      CHROMA_HOST: chroma
-      CHROMA_PORT: 8000
-      LLM_BASE_URL: http://host.docker.internal:8080/v1
-    volumes:
-      - ./data:/app/data
-      - ./photos:/app/photos:ro
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    depends_on:
-      chroma:
-        condition: service_healthy
-```
-
-```bash
-mkdir -p data/photos data/chroma_db photos
-docker compose up -d
-curl http://localhost:8001/health
-```
-
----
-
-## Run with Docker Compose
-
-```bash
-mkdir -p data/photos data/chroma_db photos
 docker compose up -d
 ```
 
@@ -139,15 +73,16 @@ docker compose up -d
 |------|---------|
 | 8081 | AMA Backend (FastAPI) |
 | 2398 | AMA Frontend (Vite/React) |
-| 42069 | llama.cpp server |
-| 8000 | ChromaDB |
+| 42069 | llama.cpp server (LLM) |
+| 6000 | ChromaDB (vector store) |
 
 ### Health Checks
 
 ```bash
 curl http://localhost:8081/health    # Backend
-curl http://localhost:2398           # Frontend
+curl http://localhost:2398           # Frontend (returns HTML)
 curl http://localhost:42069/health   # LLM server
+curl http://localhost:6000/api/v2/heartbeat  # ChromaDB
 ```
 
 ---
@@ -166,12 +101,32 @@ uvicorn src.api:app --reload --port 8081
 Run once to caption and index your photos:
 
 ```bash
-# Caption photos
-python -m src.caption --input ./photos --output data/captions.json
+# Caption photos (uses BLIP-2 on GPU)
+python -m src.handlers.generate_captions --input /mnt/f/immich-photos --output data/captions.json
 
-# Build vector store
-python -m src.vector_store --captions data/captions.json
+# Build vector store (if using ChromaDB directly)
+python -m src.handlers.embeddings --captions data/captions.json
 ```
+
+Or use the API endpoint:
+
+```bash
+# Trigger re-indexing via API
+curl -X POST http://localhost:8081/index-photos
+```
+
+---
+
+## API Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/health` | Health check |
+| GET | `/photos` | List indexed photos |
+| GET | `/stats` | Collection statistics |
+| POST | `/query` | Query with RAG |
+| POST | `/index-photos` | Re-index photos |
+| POST | `/generate-captions` | Generate captions |
 
 ---
 
@@ -192,17 +147,7 @@ python -m src.vector_store --captions data/captions.json
 | `metadata.location` | string | Reverse-geocoded location |
 | `metadata.camera_make` | string | Camera manufacturer |
 | `metadata.camera_model` | string | Camera model |
-
----
-
-## API Endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/health` | Health check |
-| GET | `/photos` | List indexed photos |
-| POST | `/query` | Query with RAG |
-| POST | `/index` | Re-index photos |
+| `metadata.embedding_text` | string | Text used for embedding |
 
 ---
 
@@ -211,17 +156,25 @@ python -m src.vector_store --captions data/captions.json
 ```
 photo-library-ama/
 ├── src/
-│   ├── caption.py        # Image captioning
-│   ├── exif.py           # EXIF extraction
-│   ├── vector_store.py   # ChromaDB operations
-│   ├── rag.py            # RAG pipeline
-│   ├── llm.py            # LLM client
-│   └── api.py            # FastAPI app
-├── photos/               # Your photos
+│   ├── api.py                    # FastAPI app
+│   ├── config.py                 # Configuration
+│   ├── __main__.py              # CLI entry point
+│   ├── handlers/
+│   │   ├── generate_captions.py # Image captioning (BLIP-2)
+│   │   ├── embeddings.py         # ChromaDB operations
+│   │   ├── search_photos.py    # Semantic search
+│   │   ├── chat_history.py     # Chat history storage
+│   │   ├── geocoding.py     # Reverse geocoding
+│   │   ├── tools.py          # Tool definitions
+│   │   └── agentic_loop.py  # Agentic RAG loop
+│   └── llm/
+│       ├── llm_call.py         # LLM API calls
+│       └── generate_system_prompt.py
+├── photo-library-ama-ui/         # Frontend (Vite/React)
 ├── data/
-│   ├── captions.json     # Generated captions
-│   └── chroma_db/        # Vector store
-├── models/               # GGUF model
+│   ├── captions.json           # Generated captions
+│   └── chroma_db/             # Vector store
+├── design-docs/                # Design documentation
 ├── docker-compose.yml
 ├── Dockerfile
 └── requirements.txt
@@ -229,23 +182,19 @@ photo-library-ama/
 
 ---
 
-## Ports
+## Troubleshooting
 
-| Port | Service |
-|------|---------|
-| 8001 | AMA API |
-| 8000 | ChromaDB (dev) |
-| 8080 | llama-server (dev) |
+**llama_server uses CPU instead of GPU**
+- Ensure NVIDIA Container Toolkit is installed and configured
+- Run: `nvidia-ctk runtime configure --runtime=docker`
+- Restart Docker: `sudo systemctl restart docker`
+
+**Port conflicts**
+- 8081: ama-backend
+- 2398: ama-frontend
+- 42069: llama_server
+- 6000: chroma
 
 ---
 
-## Prerequisites
-
-- NVIDIA GPU with CUDA
-- Docker + Docker Compose
-- NVIDIA Container Toolkit for GPU passthrough
-
-```bash
-# Verify GPU passthrough
-docker run --gpus all nvidia/cuda:12.4.0-base-ubuntu22.04 nvidia-smi
-```
+*Last Updated: April 30, 2026*
